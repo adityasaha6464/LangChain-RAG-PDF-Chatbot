@@ -1,5 +1,27 @@
+# Environment & secrets
 .env
 venv/
+env_local/
+
+# Vector database (regenerated from source PDF)
 chroma_db/
+
+# Python bytecode
 __pycache__/
 *.pyc
+*.pyo
+
+# IDE / Editor
+.vscode/
+.idea/
+*.code-workspace
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Logs
+*.log
+
+# Batch helpers (local only)
+run_chat.bat

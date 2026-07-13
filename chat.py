@@ -50,29 +50,17 @@ if not use_groq and GOOGLE_API_KEY:
 
 def call_groq_api(prompt, api_key, timeout=20):
     """Call Groq's completion endpoint. Returns text result or raises."""
-    url = "https://api.groq.dev/v1/models/groq-1.0/complete"
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
+    url = "https://api.groq.com/openai/v1/chat/completions"
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     payload = {
-        "prompt": prompt,
-        "max_tokens": 512,
+        "model": "llama-3.3-70b-versatile", 
+        "messages": [{"role": "user", "content": prompt}]
     }
+
     resp = requests.post(url, headers=headers, json=payload, timeout=timeout)
     resp.raise_for_status()
     data = resp.json()
-    # Try common fields
-    if isinstance(data, dict):
-        # Adapt to possible response shapes
-        if "text" in data:
-            return data["text"]
-        if "output" in data and isinstance(data["output"], list):
-            # join text pieces
-            return "\n".join([str(o.get("text", o)) if isinstance(o, dict) else str(o) for o in data["output"]])
-        # fallback to full json
-        return str(data)
-    return str(data)
+    return data["choices"][0]["message"]["content"]
 
 print("PDF Chatbot Ready!")
 print("Type 'exit' to quit\n")
@@ -118,10 +106,27 @@ while True:
                 attempt += 1
                 logging.warning("Groq HTTP error (attempt %s): %s", attempt, e)
                 if attempt > retries:
+                    # Try Google Gemini as fallback if available
+                    if llm is not None:
+                        try:
+                            return llm.invoke(prompt)
+                        except Exception as ge:
+                            logging.exception("Google Gemini fallback also failed: %s", ge)
                     return SimpleNamespace(content=(
                         "Sorry — the LLM service is temporarily unavailable or returned an error. Please try again later."
                     ))
                 time.sleep(backoff ** attempt)
+            except requests.ConnectionError as e:
+                # Network/DNS errors — immediately try Gemini fallback if configured
+                logging.warning("Groq connection error: %s", e)
+                if llm is not None:
+                    try:
+                        return llm.invoke(prompt)
+                    except Exception as ge:
+                        logging.exception("Google Gemini fallback also failed: %s", ge)
+                return SimpleNamespace(content=(
+                    "Unable to reach Groq API (network/DNS). Please check your network or use GOOGLE_API_KEY fallback."
+                ))
             except Exception as e:
                 attempt += 1
                 logging.exception("Error calling LLM (attempt %s): %s", attempt, e)
